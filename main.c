@@ -12,12 +12,12 @@ int sample_count;
 
 void initialize();
 void playPulse();
-int  createPulse(int frequency, signed int amp);
-int  createSaw(int frequency, signed int amp);
+int  createPulse(int *queue, int frequency, signed int amp);
+int  createSaw(  int *queue, int frequency, signed int amp);
 int  debug();
 
 int main() {
-	sample_count = createPulse(55, 9000000);
+	sample_count = createSaw(pulse_queue, 55, 9000000);
 	queue_pointer = pulse_queue;
 
 	initialize();
