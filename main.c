@@ -17,13 +17,14 @@ int  createSaw(int frequency, signed int amp);
 int  debug();
 
 int main() {
-	//initialize();
-	//pulse_queue[0] = 7;
-	sample_count = createSaw(440, 9000000);
+	sample_count = createPulse(55, 9000000);
 	queue_pointer = pulse_queue;
-	
-	while(1) {
-		playPulse();
-	}
 
+	initialize();
+	//pulse_queue[0] = 7;
+	
+
+	while(1){ 
+		// loop forevaaa
+	}
 }
