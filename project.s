@@ -74,22 +74,22 @@ createPulse:
 	movia r8, SAMPLE_RATE
 	
 	# total samples per wave
-	div r2, r8, r4	
+	div r2, r8, r5	
 	
 	# r9 is half of complete wave
 	movi r8, 2
 	div r9, r2, r8
 	mov r11, r9
-	movia r10, pulse_queue
+	mov r10, r4
 
 /* 
-	r5 - amplitude
+	r6 - amplitude
 	r9 is count of samples
 	r10 is the pulse_queue addr
 */
 pulse_high_loop:
 	beq r11, r0, pulse_high_loop_end
-	stw r5, 0(r10)
+	stw r6, 0(r10)
 	
 	addi r10, r10, 4
 	subi r11, r11, 1
@@ -97,10 +97,10 @@ pulse_high_loop:
 	
 pulse_high_loop_end:
 	mov r11, r9
-	sub r5, r0, r5
+	sub r6, r0, r6
 pulse_low_loop:
 	beq r11, r0, pulse_low_loop_end
-	stw r5, 0(r10)
+	stw r6, 0(r10)
 	
 	addi r10, r10, 4
 	subi r11, r11, 1
@@ -109,22 +109,27 @@ pulse_low_loop:
 pulse_low_loop_end:
 	ret
 	
-/* Takes a frequency in r4 and volume in r5 and generates a full saw wave 
- * Returns the number of samples in one full wave, and populates the saw buffer
+/* Takes a frequency in r4 and volume in r5 and generates a 
+ * full saw wave 
+ * Return: number of samples in one full wave, and 
+ * populates the saw buffer
  */
 createSaw:
 	movia r8, SAMPLE_RATE
-	movia r11, saw_queue
+	mov r11, r4
 	
-	#total samples per wave is in r9
-	div r9, r8, r4
+	# total samples per wave is in r9
+	div r9, r8, r5
+	# the sample count will be our return value
+	mov r2, r9
 	
-	# r10 contains the size of the step
-	add r10, r5, r5
+	# r10 is size of each step of the saw
+	add r10, r6, r6
 	div r10, r10, r9
 	
-	#set r12 as amp
-	mov r12, r5
+	# r6 is amplitude
+	mov r12, r6
+
 saw_loop:
 	ble r9, r0, saw_loop_end
 	
@@ -134,7 +139,9 @@ saw_loop:
 	addi r11, r11, 4
 	subi r9, r9, 1
 	br saw_loop
+
 saw_loop_end:
+	# Return: sample count for saw wave
 	ret
 /* Play samples from sample queue
 
