@@ -1,4 +1,5 @@
 .global createPulse
+.global createSaw
 .global playPulse
 .global initialize
 .global debug
@@ -73,7 +74,7 @@ debug:
 	ret
 
 /* Takes a frequency in r4 and volume in r5 and generates a full wave 
- * Returns the number of samples in one full wave, and populates the buffer
+ * Returns the number of samples in one full wave, and populates the pulse buffer
  *
  */
 createPulse:
@@ -114,7 +115,34 @@ pulse_low_loop:
 
 pulse_low_loop_end:
 	ret
-
+	
+/* Takes a frequency in r4 and volume in r5 and generates a full saw wave 
+ * Returns the number of samples in one full wave, and populates the saw buffer
+ */
+createSaw:
+	movia r16, SAMPLE_RATE
+	movia r19, saw_queue
+	
+	#total samples per wave is in r17
+	div r17, r16, r4
+	
+	# r18 contains the size of the step
+	add r18, r5, r5
+	div r18, r18, r17
+	
+	#set r20 as amp
+	mov r20, r5
+saw_loop:
+	ble r17, r0, saw_loop_end
+	
+	sub r20, r20, r18
+	stw r20, 0(r19)
+	
+	addi r19, r19, 4
+	subi r17, r17, 1
+	br saw_loop
+saw_loop_end:
+	ret
 /* Play samples from sample queue
 
    r4  - number of samples to play
