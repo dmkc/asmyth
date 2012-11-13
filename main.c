@@ -1,8 +1,5 @@
 #include <stdio.h>
 
-#define ADDR_SLIDESWITCHES ((volatile long *) 0x10000040)
-#define ADDR_RLED ((volatile long *) 0x10000000)
-
 //// GLOBALS
 struct Queue{
 	int position;
@@ -28,14 +25,14 @@ int  debug();
 
 int main() {
 	createSaw(&saw_queue, 55, 9000000);
-	createPulse(&pulse_queue, 55, 9000000);
+	createPulse(&pulse_queue, 54, 9000000);
 
 	initialize();
 	//pulse_queue[0] = 7;
 	
 
 	while(1){ 
-		*ADDR_RLED = *ADDR_SLIDESWITCHES;
+		//*ADDR_RLED = *ADDR_SLIDESWITCHES;
 		
 		//playBuffer();
 		// loop forevaaa

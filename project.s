@@ -3,9 +3,12 @@
 .global playPulse
 .global initialize
 .global debug
+.global debug
 .global IHANDLER
 .equ ADDR_AUDIODACFIFO, 0x10003040
 .equ ADDR_TIMER, 0x10002000
+.equ ADDR_SLIDESWITCHES, 0x10000040
+.equ ADDR_RLED, 0x10000000
 .equ SAMPLE_RATE, 48000
 
 .section .exceptions, "ax"
@@ -169,12 +172,12 @@ playBuffer:
 	# r12 contains the number of spaces left in the Right Channel.
 	
 	# r9 is the queue address
-	movia r4, saw_queue
+	movia r4, pulse_queue
 
 play_pulse_loop:
 	beq r12, r0,  play_pulse_loop_end
 
-	call Queue_get_sample
+	call combineWave
 	stwio r2, 8(r8)
 	stwio r2, 12(r8)
 	
@@ -185,3 +188,59 @@ play_pulse_loop_end:
 	ldw ra, 0(sp)
 	addi sp, sp, 4
 	ret
+
+/* Combines the waves of all active waves 
+*/
+combineWave:
+	subi sp, sp, 24
+	stw ra, 0(sp)
+	stw r16, 4(sp)
+	stw r17, 8(sp)
+	stw r18, 12(sp)
+	stw r19, 16(sp)
+	stw r20, 20(sp)
+	
+	#r19 contains total number of oscillators
+	mov r19, r0
+	mov r20, r0
+	mov r2, r0
+	
+	movia r16, ADDR_SLIDESWITCHES
+	
+	ldwio r17, 0(r16)
+	andi r17, r17, 0x1
+	
+	movi r18, 0x1
+	bne r17, r18, check_saw_wave
+	
+	movia r4, pulse_queue
+	call Queue_get_sample
+	
+	add r20, r20, r2
+	addi r19, r19, 1
+check_saw_wave:
+	ldwio r17, 0(r16)
+	andi r17, r17, 0x2
+	
+	movi r18, 0x2
+	bne r17, r18, combine_fin
+	
+	movia r4, saw_queue
+	call Queue_get_sample
+	
+	add r20, r20, r2
+	addi r19, r19, 1
+combine_fin:
+	# prevent divide by zero
+	beq r19, r0, combine_fin2
+	div r2, r20, r19 
+combine_fin2:	
+	ldw ra, 0(sp)
+	ldw r16, 4(sp)
+	ldw r17, 8(sp)
+	ldw r18, 12(sp)
+	ldw r19, 16(sp)
+	ldw r20, 20(sp)
+	addi sp, sp, 24
+	ret
+	
