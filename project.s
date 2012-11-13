@@ -24,7 +24,8 @@ IHANDLER:
 	
 	
 HANDLE_AUDIO_INTERRUPT:
-	call playPulse
+	
+	call playBuffer
 	
 	br DONE_INTERRUPT
 
@@ -66,21 +67,23 @@ debug:
 	rdctl r2, ctl0
 	ret
 
-/* Takes a frequency in r4 and volume in r5 and generates a full wave 
- * Returns the number of samples in one full wave, and populates the pulse buffer
+/* Takes address of queue in r4, frequency in r5 and volume in r6 and  
+ * generates a full wave and populates the pulse buffer
  *
  */
 createPulse:
 	movia r8, SAMPLE_RATE
 	
 	# total samples per wave
-	div r2, r8, r5	
+	div r9, r8, r5	
+	# store queue length into struct
+	stw r9, 4(r4)
 	
 	# r9 is half of complete wave
 	movi r8, 2
-	div r9, r2, r8
-	mov r11, r9
+	div r11, r9, r8
 	mov r10, r4
+	addi r10, r10, 8
 
 /* 
 	r6 - amplitude
@@ -109,7 +112,7 @@ pulse_low_loop:
 pulse_low_loop_end:
 	ret
 	
-/* Takes a frequency in r4 and volume in r5 and generates a 
+/* Takes a pointer to a Queue, frequency in r5 and volume in r6 and generates a 
  * full saw wave 
  * Return: number of samples in one full wave, and 
  * populates the saw buffer
@@ -117,11 +120,13 @@ pulse_low_loop_end:
 createSaw:
 	movia r8, SAMPLE_RATE
 	mov r11, r4
+	# r11 is pointer to sample_queue inside Queue struct
+	addi r11, r11, 8
 	
 	# total samples per wave is in r9
 	div r9, r8, r5
-	# the sample count will be our return value
-	mov r2, r9
+	# store queue length into struct
+	stw r9, 4(r4)
 	
 	# r10 is size of each step of the saw
 	add r10, r6, r6
@@ -143,16 +148,17 @@ saw_loop:
 saw_loop_end:
 	# Return: sample count for saw wave
 	ret
+	
 /* Play samples from sample queue
 
    r4  - number of samples to play
-   r9 - temp
-   r10 - current queue position
-   r11 - address of the end of queue
+   r9  - queue address
    r12 - contains number of spaces left in right channel
 */
 
-playPulse:
+playBuffer:
+	subi sp, sp, 4
+	stw ra, 0(sp)
 	movia r8, ADDR_AUDIODACFIFO
 	
 	ldwio r12, 4(r8)
@@ -162,36 +168,20 @@ playPulse:
 	srli r12, r12, 16
 	# r12 contains the number of spaces left in the Right Channel.
 	
-	# set r10 as the current queue position
-	movia r9, queue_pointer
-	ldw   r10, 0(r9)
-	
-	movia r9, sample_count
-	ldw   r9, 0(r9)
-	muli  r9, r9, 4
-	movia r11, pulse_queue
-	# r11 contains the address of the end of the queue
-	add   r11, r11, r9
+	# r9 is the queue address
+	movia r4, saw_queue
 
 play_pulse_loop:
 	beq r12, r0,  play_pulse_loop_end
-	
-	# check if we're at the end of playable sample queue
-	ble r10, r11, play_pulse_push_samples
-	
-	# in case if so, restart from beginning
-	movia r10, pulse_queue
 
-play_pulse_push_samples:
-	ldwio r9, 0(r10)
-	stwio r9, 8(r8)
-	stwio r9, 12(r8)
+	call Queue_get_sample
+	stwio r2, 8(r8)
+	stwio r2, 12(r8)
 	
-	addi r10, r10, 4
 	subi r12, r12, 1
 	br play_pulse_loop
+
 play_pulse_loop_end:
-	# save queue pointer to memory
-	movia r9, queue_pointer
-	stw r10, 0(r9)
+	ldw ra, 0(sp)
+	addi sp, sp, 4
 	ret
