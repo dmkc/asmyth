@@ -9,6 +9,7 @@
 .equ ADDR_TIMER, 0x10002000
 .equ ADDR_SLIDESWITCHES, 0x10000040
 .equ ADDR_RLED, 0x10000000
+.equ ADDR_PS2,0x10000100
 .equ SAMPLE_RATE, 48000
 
 .section .exceptions, "ax"
@@ -16,6 +17,7 @@ IHANDLER:
 	#save context
 	subi sp, sp, 4
 	stw ra, 0(sp)
+	stw r8, 4(sp)
 	
 	#determine interrupt source
 	rdctl et, ctl4
@@ -23,18 +25,30 @@ IHANDLER:
 	movi r8, 0b1000000
 	beq r8, et, HANDLE_AUDIO_INTERRUPT
 	
+	rdctl et, ctl4
+	andi et, et, 0b10000000
+	movi r8, 0b10000000
+	beq r8, et, HANDLE_KEYBOARD_INTERRUPT
+	
 	br DONE_INTERRUPT
 	
 	
 HANDLE_AUDIO_INTERRUPT:
-	
 	call playBuffer
+	br DONE_INTERRUPT
+	
+HANDLE_KEYBOARD_INTERRUPT:
+	movia r8, ADDR_PS2
+	
+	# check which key has been pressed
+	ldbio et, 0(r8)
 	
 	br DONE_INTERRUPT
 
 DONE_INTERRUPT:
 	ldw ra, 0(sp)
-	addi sp, sp, -4
+	ldw r8, 4(sp)
+	addi sp, sp, 4
 
 	subi ea, ea, 4
 	eret
@@ -53,10 +67,15 @@ initialize:
 	srli r9, r9, 16
 	stwio r9, 12(r10)
 	# clear the timer
-	stwio r0, 0(r10)		
+	stwio r0, 0(r10)
 	# start, continue, interrupt enable
 	movui r9, 0b111			
 	stwio r9, 4(r10)*/	
+	
+	# initalize ps2
+	movia r10, ADDR_PS2
+	movi r9, 0b1
+	stwio r9, 4(r10)
 	
 	# set ienable for audio codec to 1
 	movi r8, 0xfff
@@ -112,7 +131,7 @@ pulse_low_loop:
 	subi r11, r11, 1
 	br pulse_low_loop
 
-pulse_low_loop_end:
+pulse_low_loop_end
 	ret
 	
 /* Takes a pointer to a Queue, frequency in r5 and volume in r6 and generates a 

@@ -24,8 +24,8 @@ void createSaw(  Queue*, int frequency, signed int amp);
 int  debug();
 
 int main() {
-	createSaw(&saw_queue, 55, 9000000);
-	createPulse(&pulse_queue, 54, 9000000);
+	createSaw(&saw_queue, 55, 90000000);
+	createPulse(&pulse_queue, 54, 90000000);
 
 	initialize();
 	//pulse_queue[0] = 7;
@@ -33,8 +33,6 @@ int main() {
 
 	while(1){ 
 		//*ADDR_RLED = *ADDR_SLIDESWITCHES;
-		
-		//playBuffer();
 		// loop forevaaa
 	}
 }
