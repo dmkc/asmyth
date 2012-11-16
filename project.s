@@ -15,9 +15,10 @@
 .section .exceptions, "ax"
 IHANDLER:
 	#save context
-	subi sp, sp, 4
+	subi sp, sp, 12
 	stw ra, 0(sp)
 	stw r8, 4(sp)
+	stw r9, 8(sp)
 	
 	#determine interrupt source
 	rdctl et, ctl4
@@ -32,23 +33,118 @@ IHANDLER:
 	
 	br DONE_INTERRUPT
 	
-	
+
+# AUDIO INTERRUPT HANDLING
 HANDLE_AUDIO_INTERRUPT:
 	call playBuffer
 	br DONE_INTERRUPT
 	
+
+# KEYBOARD INTERRUPT HANDLING
 HANDLE_KEYBOARD_INTERRUPT:
 	movia r8, ADDR_PS2
 	
-	# check which key has been pressed
+	# figure out key code
 	ldbio et, 0(r8)
-	
-	br DONE_INTERRUPT
+	movi r8, 0xfffffff0
+	# check if key has been released
+	beq et, r8, KEY_BREAK
+
+	# looks like it's a new key keypress 
+	movi r9, 0x1
+	movia r8, keyPressed
+	stw r9, 0(r8)
+	movia r8, regenerateWave
+	stw r9, 0(r8)
+
+	# figure out frequency multiplier based on key code
+	movia r8, frequencyOffset;
+
+	KEYPRESS_HANDLE:	
+		KEY_1:
+			movi r9, 0x1c
+			bne et, r9, KEY_2
+			movi r9, 0
+			br KEYPRESS_DONE
+		KEY_2:
+			movi r9, 0x1d
+			bne et, r9, KEY_3
+			movi r9, 5
+			br KEYPRESS_DONE
+		KEY_3:
+			movi r9, 0x1b
+			bne et, r9, KEY_4
+			movi r9, 9
+			br KEYPRESS_DONE
+		KEY_4:
+			movi r9, 0x24
+			bne et, r9, KEY_5
+			movi r9, 14
+			br KEYPRESS_DONE
+		KEY_5:
+			movi r9, 0x23
+			bne et, r9, KEY_6
+			movi r9, 18
+			br KEYPRESS_DONE
+		KEY_6:
+			movi r9, 0x2b
+			bne et, r9, KEY_7
+			movi r9, 23
+			br KEYPRESS_DONE
+		KEY_7:
+			movi r9, 0x2c
+			bne et, r9, KEY_8
+			movi r9, 28
+			br KEYPRESS_DONE
+		KEY_8:
+			movi r9, 0x34
+			bne et, r9, KEY_9
+			movi r9, 32
+			br KEYPRESS_DONE
+		KEY_9:
+			movi r9, 0x35
+			bne et, r9, KEY_10
+			movi r9, 37
+			br KEYPRESS_DONE
+		KEY_10:
+			movi r9, 0x33
+			bne et, r9, KEY_11
+			movi r9, 41
+			br KEYPRESS_DONE
+		KEY_11:
+			movi r9, 0x3c
+			bne et, r9, KEY_12
+			movi r9, 46
+			br KEYPRESS_DONE
+		KEY_12:
+			movi r9, 0x3b
+			bne et, r9, KEY_13
+			movi r9, 51
+			br KEYPRESS_DONE
+		KEY_13:
+			movi r9, 0x42
+			bne et, r9, KEYPRESS_UNKNOWN
+			movi r9, 55
+			br KEYPRESS_DONE
+	KEYPRESS_DONE:
+		stw r9, 0(r8)
+		br DONE_INTERRUPT
+
+	KEYPRESS_UNKNOWN:
+		br DONE_INTERRUPT
+
+
+	# set keyPressed to false
+	KEY_BREAK:
+		mov et, r0
+		movia r8, keyPressed
+		stw et, 0(r8)
 
 DONE_INTERRUPT:
 	ldw ra, 0(sp)
 	ldw r8, 4(sp)
-	addi sp, sp, 4
+	ldw r9, 8(sp)
+	addi sp, sp, 12
 
 	subi ea, ea, 4
 	eret
@@ -94,6 +190,7 @@ debug:
  *
  */
 createPulse:
+
 	movia r8, SAMPLE_RATE
 	
 	# total samples per wave
@@ -131,7 +228,7 @@ pulse_low_loop:
 	subi r11, r11, 1
 	br pulse_low_loop
 
-pulse_low_loop_end
+pulse_low_loop_end:
 	ret
 	
 /* Takes a pointer to a Queue, frequency in r5 and volume in r6 and generates a 
@@ -157,19 +254,19 @@ createSaw:
 	# r6 is amplitude
 	mov r12, r6
 
-saw_loop:
-	ble r9, r0, saw_loop_end
-	
-	sub r12, r12, r10
-	stw r12, 0(r11)
-	
-	addi r11, r11, 4
-	subi r9, r9, 1
-	br saw_loop
+	saw_loop:
+		ble r9, r0, saw_loop_end
+		
+		sub r12, r12, r10
+		stw r12, 0(r11)
+		
+		addi r11, r11, 4
+		subi r9, r9, 1
+		br saw_loop
 
-saw_loop_end:
-	# Return: sample count for saw wave
-	ret
+	saw_loop_end:
+		# Return: sample count for saw wave
+		ret
 	
 /* Play samples from sample queue
 
@@ -181,32 +278,41 @@ saw_loop_end:
 playBuffer:
 	subi sp, sp, 4
 	stw ra, 0(sp)
-	movia r8, ADDR_AUDIODACFIFO
 	
-	ldwio r12, 4(r8)
-	# Get the write space in Right Channel
-	movia r13, 0x00ff0000
-	and r12, r12, r13
-	srli r12, r12, 16
-	# r12 contains the number of spaces left in the Right Channel.
-	
-	# r9 is the queue address
-	movia r4, pulse_queue
+	# regenerate the waves, e.g. if a key has been pressed
+	movia r8, regenerateWave
+	ldw r8, 0(r8)
+	beq r8, r0, playBuffer_setup
 
-play_pulse_loop:
-	beq r12, r0,  play_pulse_loop_end
+	call createWaves
 
-	call combineWave
-	stwio r2, 8(r8)
-	stwio r2, 12(r8)
-	
-	subi r12, r12, 1
-	br play_pulse_loop
+	playBuffer_setup:
+		movia r8, ADDR_AUDIODACFIFO
+		
+		ldwio r12, 4(r8)
+		# Get the write space in Right Channel
+		movia r13, 0x00ff0000
+		and r12, r12, r13
+		srli r12, r12, 16
+		# r12 contains the number of spaces left in the Right Channel.
+		
+		# r9 is the queue address
+		movia r4, pulse_queue
 
-play_pulse_loop_end:
-	ldw ra, 0(sp)
-	addi sp, sp, 4
-	ret
+	play_pulse_loop:
+		beq r12, r0,  play_pulse_loop_end
+
+		call combineWave
+		stwio r2, 8(r8)
+		stwio r2, 12(r8)
+		
+		subi r12, r12, 1
+		br play_pulse_loop
+
+	play_pulse_loop_end:
+		ldw ra, 0(sp)
+		addi sp, sp, 4
+		ret
 
 /* Combines the waves of all active waves 
 */
@@ -237,29 +343,30 @@ combineWave:
 	
 	add r20, r20, r2
 	addi r19, r19, 1
-check_saw_wave:
-	ldwio r17, 0(r16)
-	andi r17, r17, 0x2
-	
-	movi r18, 0x2
-	bne r17, r18, combine_fin
-	
-	movia r4, saw_queue
-	call Queue_get_sample
-	
-	add r20, r20, r2
-	addi r19, r19, 1
-combine_fin:
-	# prevent divide by zero
-	beq r19, r0, combine_fin2
-	div r2, r20, r19 
-combine_fin2:	
-	ldw ra, 0(sp)
-	ldw r16, 4(sp)
-	ldw r17, 8(sp)
-	ldw r18, 12(sp)
-	ldw r19, 16(sp)
-	ldw r20, 20(sp)
-	addi sp, sp, 24
-	ret
+
+	check_saw_wave:
+		ldwio r17, 0(r16)
+		andi r17, r17, 0x2
+		
+		movi r18, 0x2
+		bne r17, r18, combine_fin
+		
+		movia r4, saw1_queue
+		call Queue_get_sample
+		
+		add r20, r20, r2
+		addi r19, r19, 1
+	combine_fin:
+		# prevent divide by zero
+		beq r19, r0, combine_teardown
+		div r2, r20, r19 
+	combine_teardown:	
+		ldw ra, 0(sp)
+		ldw r16, 4(sp)
+		ldw r17, 8(sp)
+		ldw r18, 12(sp)
+		ldw r19, 16(sp)
+		ldw r20, 20(sp)
+		addi sp, sp, 24
+		ret
 	
