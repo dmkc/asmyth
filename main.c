@@ -55,11 +55,11 @@ int main() {
  */
 void createWaves() {
 	createSaw(&saw1_queue, 
-			 baseFrequency + frequencyOffset, 90000000);
-	createSaw(&saw2_queue, 
-		 baseFrequency + frequencyOffset, 90000000);
+		baseFrequency + frequencyOffset, 90000000);
+	createPulse(&saw2_queue, 
+		baseFrequency + frequencyOffset - 1, 90000000);
 	createPulse(&pulse_queue, 
-			baseFrequency + frequencyOffset + 1, 90000000);
+		baseFrequency + frequencyOffset + 1, 90000000);
 	
 	regenerateWave = 0;
 }
