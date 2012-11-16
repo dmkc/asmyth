@@ -126,12 +126,13 @@ HANDLE_KEYBOARD_INTERRUPT:
 			bne et, r9, KEYPRESS_UNKNOWN
 			movi r9, 55
 			br KEYPRESS_DONE
-	KEYPRESS_DONE:
-		stw r9, 0(r8)
-		br DONE_INTERRUPT
+		
+		KEYPRESS_DONE:
+			stw r9, 0(r8)
+			br DONE_INTERRUPT
 
-	KEYPRESS_UNKNOWN:
-		br DONE_INTERRUPT
+		KEYPRESS_UNKNOWN:
+			br DONE_INTERRUPT
 
 
 	# set keyPressed to false
@@ -140,14 +141,14 @@ HANDLE_KEYBOARD_INTERRUPT:
 		movia r8, keyPressed
 		stw et, 0(r8)
 
-DONE_INTERRUPT:
-	ldw ra, 0(sp)
-	ldw r8, 4(sp)
-	ldw r9, 8(sp)
-	addi sp, sp, 12
+	DONE_INTERRUPT:
+		ldw ra, 0(sp)
+		ldw r8, 4(sp)
+		ldw r9, 8(sp)
+		addi sp, sp, 12
 
-	subi ea, ea, 4
-	eret
+		subi ea, ea, 4
+		eret
 	
 .text
 initialize:
@@ -204,32 +205,32 @@ createPulse:
 	mov r10, r4
 	addi r10, r10, 8
 
-/* 
-	r6 - amplitude
-	r9 is count of samples
-	r10 is the pulse_queue addr
-*/
-pulse_high_loop:
-	beq r11, r0, pulse_high_loop_end
-	stw r6, 0(r10)
-	
-	addi r10, r10, 4
-	subi r11, r11, 1
-	br pulse_high_loop
-	
-pulse_high_loop_end:
-	mov r11, r9
-	sub r6, r0, r6
-pulse_low_loop:
-	beq r11, r0, pulse_low_loop_end
-	stw r6, 0(r10)
-	
-	addi r10, r10, 4
-	subi r11, r11, 1
-	br pulse_low_loop
+	/* 
+		r6 - amplitude
+		r9 is count of samples
+		r10 is the pulse_queue addr
+	*/
+	pulse_high_loop:
+		beq r11, r0, pulse_high_loop_end
+		stw r6, 0(r10)
+		
+		addi r10, r10, 4
+		subi r11, r11, 1
+		br pulse_high_loop
+		
+	pulse_high_loop_end:
+		mov r11, r9
+		sub r6, r0, r6
+	pulse_low_loop:
+		beq r11, r0, pulse_low_loop_end
+		stw r6, 0(r10)
+		
+		addi r10, r10, 4
+		subi r11, r11, 1
+		br pulse_low_loop
 
-pulse_low_loop_end:
-	ret
+	pulse_low_loop_end:
+		ret
 	
 /* Takes a pointer to a Queue, frequency in r5 and volume in r6 and generates a 
  * full saw wave 
@@ -335,31 +336,65 @@ combineWave:
 	ldwio r17, 0(r16)
 	andi r17, r17, 0x1
 	
+	# Combine pulse wave (switch 1)
 	movi r18, 0x1
-	bne r17, r18, check_saw_wave
+	bne r17, r18, combine_saw1
 	
 	movia r4, pulse_queue
 	call Queue_get_sample
 	
+	# r19 is how many oscillators we have total
 	add r20, r20, r2
 	addi r19, r19, 1
 
-	check_saw_wave:
+	# Add saw1 (switch #2)
+	combine_saw1:
 		ldwio r17, 0(r16)
 		andi r17, r17, 0x2
 		
 		movi r18, 0x2
-		bne r17, r18, combine_fin
+		bne r17, r18, combine_saw2
 		
 		movia r4, saw1_queue
 		call Queue_get_sample
 		
 		add r20, r20, r2
 		addi r19, r19, 1
-	combine_fin:
+
+	# Add saw2 (switch #3)
+	combine_saw2:
+		ldwio r17, 0(r16)
+		andi r17, r17, 0x4
+		
+		movi r18, 0x4
+		bne r17, r18, combine_saw2_divide
+		
+		movia r4, saw2_queue
+		call Queue_get_sample
+		
+		add r20, r20, r2
+		addi r19, r19, 1
+
+	combine_saw2_divide:
 		# prevent divide by zero
 		beq r19, r0, combine_teardown
-		div r2, r20, r19 
+		div r2, r20, r19
+
+	# boost amplitude if more than 1 oscillator is on
+	boost_amplitude:
+		beq  r19, r0, combine_teardown
+		movi r18, 1
+		# a single oscillator doesn't need boosting
+		beq  r19, r18, combine_teardown
+
+		boost_amplitude_2osc:
+			movi r18, 2
+			add r2, r2, r2
+			beq  r18, r19, combine_teardown
+
+		boost_amplitude_3osc:
+			add r2, r2, r2
+
 	combine_teardown:	
 		ldw ra, 0(sp)
 		ldw r16, 4(sp)
