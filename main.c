@@ -1,6 +1,9 @@
 #include <stdio.h>
 
 //// GLOBALS
+/* 
+ * Queue of audio samples for an oscillator.
+ */
 struct Queue{
 	int position;
 	int length;
@@ -18,15 +21,33 @@ Queue pulse_queue;
 Queue saw1_queue;
 Queue saw2_queue;
 
+/*
+ * Volume envelope. Describes how volume of an oscillator
+ * changes over time once a note is triggered.
+ */
+struct Envelope {
+    int attackLength;
+    int attackLeft;
+    // default release of 1 second
+    int releaseLength;
+    int releaseLeft;
+};
+
+typedef struct Envelope Envelope;
+
+Envelope masterEnvelope;
+
 // whether a key is currently pressed. Used by envelope.
 int keyPressed;
 // a flag set by keyboard interrupt handler to make sure the waveforms 
 // are regenerated
 int regenerateWave;
-// how much to multiply the base frequency by
+// how much to multiply the base frequency by. Used to play 12 notes.
 int frequencyOffset;
 int baseFrequency;
+int masterAmplitude;
 
+// Method headers
 void initialize();
 void playBuffer();
 void createPulse(Queue*, int frequency, signed int amp);
@@ -39,6 +60,9 @@ int  debug();
 int main() {
 	frequencyOffset = 0;
 	baseFrequency = 55;
+    masterAmplitude = masterAmplitude;
+    // default release is 1 second long
+    masterEnvelope.releaseLength = 48000;
 
 	createWaves();
 	initialize();
@@ -55,11 +79,11 @@ int main() {
  */
 void createWaves() {
 	createSaw(&saw1_queue, 
-		baseFrequency + frequencyOffset, 90000000);
+		baseFrequency + frequencyOffset, masterAmplitude);
 	createPulse(&saw2_queue, 
-		baseFrequency + frequencyOffset - 1, 90000000);
+		baseFrequency + frequencyOffset - 1, masterAmplitude);
 	createPulse(&pulse_queue, 
-		baseFrequency + frequencyOffset + 1, 90000000);
+		baseFrequency + frequencyOffset + 1, masterAmplitude);
 	
 	regenerateWave = 0;
 }

@@ -12,6 +12,7 @@
 .equ ADDR_PS2,0x10000100
 .equ SAMPLE_RATE, 48000
 
+# Interrupt handlers
 .section .exceptions, "ax"
 IHANDLER:
 	#save context
@@ -129,6 +130,7 @@ HANDLE_KEYBOARD_INTERRUPT:
 		
 		KEYPRESS_DONE:
 			stw r9, 0(r8)
+            #call handleNoteChange
 			br DONE_INTERRUPT
 
 		KEYPRESS_UNKNOWN:
@@ -404,4 +406,23 @@ combineWave:
 		ldw r20, 20(sp)
 		addi sp, sp, 24
 		ret
-	
+
+# Do what needs to happen after a key change, e.g. envelope
+handleNoteChange:
+	subi sp, sp, 12
+	stw ra, 0(sp)
+	stw r16, 4(sp)
+	stw r17, 8(sp)
+    
+    handleNoteChange_teardown:
+        ldw ra, 0(sp)
+        ldw r16, 4(sp)
+        ldw r17, 8(sp)
+        add sp, sp, 12
+
+# Wrap a sample into the envelope
+wrapInEnvelope:
+    # if keyPressed, then simply return
+    # otherwise, decrease volume down sample by sample
+    # starting at masterAmplitude down to 0
+    # Remember to drop down to 0 for positive and negative values.
