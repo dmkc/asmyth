@@ -140,7 +140,7 @@ HANDLE_KEYBOARD_INTERRUPT:
 			movia r8, regenerateWave
 			stw r9, 0(r8)
 
-            #call handleNoteChange
+            call handleNoteChange
 			br KEY_STORE_LAST
 
 		KEYPRESS_UNKNOWN:
@@ -430,16 +430,25 @@ handleNoteChange:
 	stw ra, 0(sp)
 	stw r16, 4(sp)
 	stw r17, 8(sp)
+
+	# restore envelope release/attack values
+	movia r16, masterEnvelope
+	ldw r17, 12(r16)
+	stw r17, 16(r16)
+	ldw r17, 0(r16)
+	stw r17, 4(r16)
     
     handleNoteChange_teardown:
         ldw ra, 0(sp)
         ldw r16, 4(sp)
         ldw r17, 8(sp)
         addi sp, sp, 12
+        ret
 
 # Wrap a sample into the envelope
 wrapInEnvelope:
-    # if keyPressed, then simply return
+    # if keyPressed, then if there is still attack left, 
+    # begin/continue attack. Else, simply return
     # otherwise, decrease volume down sample by sample
     # starting at masterAmplitude down to 0
     # Remember to drop down to 0 for positive and negative values.
@@ -450,14 +459,59 @@ wrapInEnvelope:
 	movia r16, keyPressed
 	ldw r16, 0(r16)
 	beq r16, r0, wrapInEnvelope_keyRelease
+	# the key is still being pressed. Check if there is
+	# any attack left.
+	movia r16, masterEnvelope
+	ldw r16, 4(r16)
+	#bne r16, r0, wrapInEnvelope_keyAttack
 	mov r2, r4
 	br wrapInEnvelope_teardown
 
-	wrapInEnvelope_keyRelease:
+	wrapInEnvelope_keyAttack:
+		movia r16, masterEnvelope
+		ldw r17, 4(r16)
+		subi r17, r17, 1
+		stw r17, 4(r16)
+
+		ldw r18, 0(r16)
+		sub r18, r18, r17
+		ldw r17, 8(r16)
+		mul r17, r17, r18
+
+		mov r2, r17
+
+		br wrapInEnvelope_teardown
+
+	wrapInEnvelope_keyRelease:		
 		mov r2, r0
+		movia r16, masterEnvelope
+
+		# check whether release has finished
+		ldw r17, 16(r16)
+		beq r17, r0, wrapInEnvelope_teardown
+		subi r17, r17, 1
+		stw r17, 16(r16)
+
+		ldw r18, 12(r16)
+		sub r18, r18, r17
+		ldw r17, 20(r16)
+		mul r17, r17, r18
+
+		bgt r4, r0, wrapInEnvelope_keyRelease_substract
+
+	wrapInEnvelope_keyRelease_add:
+		add r2, r4, r17
+		blt r2, r0, wrapInEnvelope_teardown
+		mov r2, r0
+		br wrapInEnvelope_teardown
+
+	wrapInEnvelope_keyRelease_substract:
+		sub r2, r4, r17
+		bgt r2, r0, wrapInEnvelope_teardown
+		mov r2, r0 
 
 	wrapInEnvelope_teardown:
-		ldw ra, 0(sp)
+		ldw ra,  0(sp)
 		ldw r16, 4(sp)
 		addi sp, sp, 8
 		ret
