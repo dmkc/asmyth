@@ -28,9 +28,11 @@ Queue saw2_queue;
 struct Envelope {
     int attackLength;
     int attackLeft;
+    int attackStep;
     // default release of 1 second
     int releaseLength;
     int releaseLeft;
+    int releaseStep;
 };
 
 typedef struct Envelope Envelope;
@@ -39,6 +41,7 @@ Envelope masterEnvelope;
 
 // whether a key is currently pressed. Used by envelope.
 int keyPressed;
+int lastKeyInterrupt;
 // a flag set by keyboard interrupt handler to make sure the waveforms 
 // are regenerated
 int regenerateWave;
@@ -60,9 +63,13 @@ int  debug();
 int main() {
 	frequencyOffset = 0;
 	baseFrequency = 55;
-    masterAmplitude = masterAmplitude;
+    masterAmplitude = 90000000;
+    //default attack is half second long
+    masterEnvelope.attackLength = 24000;
+    masterEnvelope.attackStep = masterAmplitude/masterEnvelope.attackLength;
     // default release is 1 second long
-    masterEnvelope.releaseLength = 48000;
+    masterEnvelope.releaseLength = 24000;
+    masterEnvelope.releaseStep = masterAmplitude/masterEnvelope.releaseLength;
 
 	createWaves();
 	initialize();
