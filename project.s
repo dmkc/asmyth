@@ -5,6 +5,8 @@
 .global debug
 .global debug
 .global IHANDLER
+.global wrapInEnvelope
+
 .equ ADDR_AUDIODACFIFO, 0x10003040
 .equ ADDR_TIMER, 0x10002000
 .equ ADDR_SLIDESWITCHES, 0x10000040
@@ -47,16 +49,16 @@ HANDLE_KEYBOARD_INTERRUPT:
 	
 	# figure out key code
 	ldbio et, 0(r8)
+
+	# check if key was released
+	movia r8, lastKeyInterrupt
+	ldw r9, 0(r8)
+	
 	movi r8, 0xfffffff0
+	beq r9, r8, KEY_STORE_LAST
 	# check if key has been released
 	beq et, r8, KEY_BREAK
 
-	# looks like it's a new key keypress 
-	movi r9, 0x1
-	movia r8, keyPressed
-	stw r9, 0(r8)
-	movia r8, regenerateWave
-	stw r9, 0(r8)
 
 	# figure out frequency multiplier based on key code
 	movia r8, frequencyOffset;
@@ -130,18 +132,31 @@ HANDLE_KEYBOARD_INTERRUPT:
 		
 		KEYPRESS_DONE:
 			stw r9, 0(r8)
+
+			# mark key as pressed 
+			movi r9, 0x1
+			movia r8, keyPressed
+			stw r9, 0(r8)
+			movia r8, regenerateWave
+			stw r9, 0(r8)
+
             #call handleNoteChange
-			br DONE_INTERRUPT
+			br KEY_STORE_LAST
 
 		KEYPRESS_UNKNOWN:
 			br DONE_INTERRUPT
 
+		# set keyPressed to false
+		KEY_BREAK:
+			mov r9, r0
+			movia r8, keyPressed
+			stw r9, 0(r8)
+			br KEY_STORE_LAST
 
-	# set keyPressed to false
-	KEY_BREAK:
-		mov et, r0
-		movia r8, keyPressed
+	KEY_STORE_LAST:
+		movia r8, lastKeyInterrupt
 		stw et, 0(r8)
+		br DONE_INTERRUPT
 
 	DONE_INTERRUPT:
 		ldw ra, 0(sp)
@@ -306,6 +321,8 @@ playBuffer:
 		beq r12, r0,  play_pulse_loop_end
 
 		call combineWave
+		mov r4, r2
+		call wrapInEnvelope
 		stwio r2, 8(r8)
 		stwio r2, 12(r8)
 		
@@ -418,7 +435,7 @@ handleNoteChange:
         ldw ra, 0(sp)
         ldw r16, 4(sp)
         ldw r17, 8(sp)
-        add sp, sp, 12
+        addi sp, sp, 12
 
 # Wrap a sample into the envelope
 wrapInEnvelope:
@@ -426,3 +443,21 @@ wrapInEnvelope:
     # otherwise, decrease volume down sample by sample
     # starting at masterAmplitude down to 0
     # Remember to drop down to 0 for positive and negative values.
+    subi sp, sp, 8
+	stw ra, 0(sp)
+	stw r16, 4(sp)
+
+	movia r16, keyPressed
+	ldw r16, 0(r16)
+	beq r16, r0, wrapInEnvelope_keyRelease
+	mov r2, r4
+	br wrapInEnvelope_teardown
+
+	wrapInEnvelope_keyRelease:
+		mov r2, r0
+
+	wrapInEnvelope_teardown:
+		ldw ra, 0(sp)
+		ldw r16, 4(sp)
+		addi sp, sp, 8
+		ret
