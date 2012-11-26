@@ -8,6 +8,8 @@ struct Queue{
 	int position;
 	int length;
 	int sample_queue[96000];
+    int legato_length;
+    int legato_position;
 };
 
 typedef struct Queue Queue;
@@ -41,12 +43,15 @@ Envelope masterEnvelope;
 
 // whether a key is currently pressed. Used by envelope.
 int keyPressed;
+int keyReleased;
 int lastKeyInterrupt;
 // a flag set by keyboard interrupt handler to make sure the waveforms 
 // are regenerated
 int regenerateWave;
+int enableLegato;
 // how much to multiply the base frequency by. Used to play 12 notes.
 int frequencyOffset;
+int legatoFrequency;
 int baseFrequency;
 int masterAmplitude;
 
@@ -56,6 +61,22 @@ void playBuffer();
 void createPulse(Queue*, int frequency, signed int amp);
 void createSaw(  Queue*, int frequency, signed int amp);
 int  debug();
+
+/**
+ * Generate waveforms for all oscillators.
+ *
+ * Use baseFrequency + frequencyOffset as frequencies.
+ */
+void createWaves() {
+	createSaw(&saw1_queue, 
+		baseFrequency + frequencyOffset, masterAmplitude);
+	createPulse(&saw2_queue, 
+		baseFrequency + frequencyOffset - 1, masterAmplitude);
+	createPulse(&pulse_queue, 
+		baseFrequency + frequencyOffset + 1, masterAmplitude);
+	
+	regenerateWave = 0;
+}
 
 /**
  * Where things begin.
@@ -77,20 +98,4 @@ int main() {
 	while(1){ 
 		// loop forevaaa
 	}
-}
-
-/**
- * Generate waveforms for all oscillators.
- *
- * Use baseFrequency + frequencyOffset as frequencies.
- */
-void createWaves() {
-	createSaw(&saw1_queue, 
-		baseFrequency + frequencyOffset, masterAmplitude);
-	createPulse(&saw2_queue, 
-		baseFrequency + frequencyOffset - 1, masterAmplitude);
-	createPulse(&pulse_queue, 
-		baseFrequency + frequencyOffset + 1, masterAmplitude);
-	
-	regenerateWave = 0;
 }

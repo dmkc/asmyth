@@ -59,7 +59,6 @@ HANDLE_KEYBOARD_INTERRUPT:
 	# check if key has been released
 	beq et, r8, KEY_BREAK
 
-
 	# figure out frequency multiplier based on key code
 	movia r8, frequencyOffset;
 
@@ -131,17 +130,33 @@ HANDLE_KEYBOARD_INTERRUPT:
 			br KEYPRESS_DONE
 		
 		KEYPRESS_DONE:
-			stw r9, 0(r8)
+            mov et, r9
 
-			# mark key as pressed 
-			movi r9, 0x1
+            # Figure out if we need legato
 			movia r8, keyPressed
-			stw r9, 0(r8)
-			movia r8, regenerateWave
-			stw r9, 0(r8)
+            ldw r8, 0(r8)
+            beq r0, r8, KEYPRESS_DONE_SAVE
+            # If key already marked pressed, then turn on legato
+            movia r8, enableLegato
+            movi r9, 0x1
+            stw r9, 0(r8)
+            movia r8, legatoFrequency
+            stw et, 0(r8)
+            br KEYPRESS_DONE_MARK_DONE
 
-            call handleNoteChange
-			br KEY_STORE_LAST
+            # Just save frequency offset if legato is off
+            KEYPRESS_DONE_SAVE:
+                stw et, 0(r8)
+            KEYPRESS_DONE_MARK_DONE:
+                # mark key as pressed 
+                movi r9, 0x1
+                movia r8, keyPressed
+                stw r9, 0(r8)
+                movia r8, regenerateWave
+                stw r9, 0(r8)
+
+                call handleNoteChange
+                br KEY_STORE_LAST
 
 		KEYPRESS_UNKNOWN:
 			br DONE_INTERRUPT
@@ -151,6 +166,9 @@ HANDLE_KEYBOARD_INTERRUPT:
 			mov r9, r0
 			movia r8, keyPressed
 			stw r9, 0(r8)
+            # disable legato as well
+            movia r8, enableLegato
+            stw r0, 0(r8)
 			br KEY_STORE_LAST
 
 	KEY_STORE_LAST:
@@ -334,7 +352,7 @@ playBuffer:
 		addi sp, sp, 4
 		ret
 
-/* Combines the waves of all active waves 
+/* Combines the samples of all active waves 
 */
 combineWave:
 	subi sp, sp, 24
