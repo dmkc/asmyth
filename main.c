@@ -54,6 +54,9 @@ int frequencyOffset;
 int legatoFrequency;
 int baseFrequency;
 int masterAmplitude;
+// release lengths
+int minReleaseLength;
+int maxReleaseLength;
 
 // Method headers
 void initialize();
@@ -85,8 +88,10 @@ int main() {
 	frequencyOffset = 0;
 	baseFrequency = 55;
     masterAmplitude = 90000000;
+    minReleaseLength = 0;
+    maxReleaseLength = 48000;
     //default attack is half second long
-    masterEnvelope.attackLength = 24000;
+    masterEnvelope.attackLength = maxReleaseLength;
     masterEnvelope.attackStep = masterAmplitude/masterEnvelope.attackLength;
     // default release is 1 second long
     masterEnvelope.releaseLength = 24000;
