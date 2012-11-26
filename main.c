@@ -8,8 +8,6 @@ struct Queue{
 	int position;
 	int length;
 	int sample_queue[96000];
-    int legato_length;
-    int legato_position;
 };
 
 typedef struct Queue Queue;
@@ -41,6 +39,21 @@ typedef struct Envelope Envelope;
 
 Envelope masterEnvelope;
 
+/* Legato
+ */
+struct Legato {
+    int doLegato;
+    int length;
+    // frequency of wave in samples
+    int targetSamples;
+    int stepSize;
+    // increase num of samples by 2 every `counter`
+    int counter;
+};
+
+typedef struct Legato Legato;
+Legato legato;
+
 // whether a key is currently pressed. Used by envelope.
 int keyPressed;
 int keyReleased;
@@ -48,10 +61,9 @@ int lastKeyInterrupt;
 // a flag set by keyboard interrupt handler to make sure the waveforms 
 // are regenerated
 int regenerateWave;
-int enableLegato;
 // how much to multiply the base frequency by. Used to play 12 notes.
 int frequencyOffset;
-int legatoFrequency;
+int frequencyOffsetSamples;
 int baseFrequency;
 int masterAmplitude;
 
@@ -69,15 +81,13 @@ int  debug();
  * Use baseFrequency + frequencyOffset as frequencies.
  */
 void createWaves() {
-    int samples = calculateSamples(baseFrequency + frequencyOffset);
-	createSaw(&saw1_queue, samples, masterAmplitude);
-    samples = calculateSamples(baseFrequency + frequencyOffset - 1);
-	createPulse(&saw2_queue, samples, masterAmplitude);
-    samples = calculateSamples(baseFrequency + frequencyOffset + 1);
-	createPulse(&pulse_queue, samples, masterAmplitude);
+	createSaw(&saw1_queue, frequencyOffsetSamples, masterAmplitude);
+	createPulse(&saw2_queue, frequencyOffsetSamples, masterAmplitude);
+	createPulse(&pulse_queue, frequencyOffsetSamples, masterAmplitude);
 	
 	regenerateWave = 0;
 }
+
 
 /**
  * Where things begin.
@@ -93,6 +103,9 @@ int main() {
     masterEnvelope.releaseLength = 24000;
     masterEnvelope.releaseStep = masterAmplitude/masterEnvelope.releaseLength;
 
+    // Legato settings
+    legato.length = 48000;
+
 	createWaves();
 	initialize();
 
@@ -100,3 +113,5 @@ int main() {
 		// loop forevaaa
 	}
 }
+
+

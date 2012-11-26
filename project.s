@@ -61,73 +61,73 @@ HANDLE_KEYBOARD_INTERRUPT:
 	beq et, r8, KEY_BREAK
 
 	# figure out frequency multiplier based on key code
-	movia r8, frequencyOffset;
+	movia r8, frequencyOffsetSamples;
 
 	KEYPRESS_HANDLE:	
 		KEY_1:
 			movi r9, 0x1c
 			bne et, r9, KEY_2
-			movi r9, 0
+			movi r9, 873
 			br KEYPRESS_DONE
 		KEY_2:
 			movi r9, 0x1d
 			bne et, r9, KEY_3
-			movi r9, 5
+			movi r9, 800
 			br KEYPRESS_DONE
 		KEY_3:
 			movi r9, 0x1b
 			bne et, r9, KEY_4
-			movi r9, 9
+			movi r9, 750
 			br KEYPRESS_DONE
 		KEY_4:
 			movi r9, 0x24
 			bne et, r9, KEY_5
-			movi r9, 14
+			movi r9, 696
 			br KEYPRESS_DONE
 		KEY_5:
 			movi r9, 0x23
 			bne et, r9, KEY_6
-			movi r9, 18
+			movi r9, 658
 			br KEYPRESS_DONE
 		KEY_6:
 			movi r9, 0x2b
 			bne et, r9, KEY_7
-			movi r9, 23
+			movi r9, 615
 			br KEYPRESS_DONE
 		KEY_7:
 			movi r9, 0x2c
 			bne et, r9, KEY_8
-			movi r9, 28
+			movi r9, 578
 			br KEYPRESS_DONE
 		KEY_8:
 			movi r9, 0x34
 			bne et, r9, KEY_9
-			movi r9, 32
+			movi r9, 552
 			br KEYPRESS_DONE
 		KEY_9:
 			movi r9, 0x35
 			bne et, r9, KEY_10
-			movi r9, 37
+			movi r9, 522
 			br KEYPRESS_DONE
 		KEY_10:
 			movi r9, 0x33
 			bne et, r9, KEY_11
-			movi r9, 41
+			movi r9, 500
 			br KEYPRESS_DONE
 		KEY_11:
 			movi r9, 0x3c
 			bne et, r9, KEY_12
-			movi r9, 46
+			movi r9, 475
 			br KEYPRESS_DONE
 		KEY_12:
 			movi r9, 0x3b
 			bne et, r9, KEY_13
-			movi r9, 51
+			movi r9, 453
 			br KEYPRESS_DONE
 		KEY_13:
 			movi r9, 0x42
 			bne et, r9, KEYPRESS_UNKNOWN
-			movi r9, 55
+			movi r9, 436
 			br KEYPRESS_DONE
 		
 		KEYPRESS_DONE:
@@ -138,11 +138,15 @@ HANDLE_KEYBOARD_INTERRUPT:
             ldw r8, 0(r8)
             beq r0, r8, KEYPRESS_DONE_SAVE
             # If key already marked pressed, then turn on legato
-            movia r8, enableLegato
+            movia r8, legato
+            ldw r9, 4(r8)
+            # Do nothing if legato length is 0
+            beq r0, r9, KEYPRESS_DONE_SAVE
+
+            # Legato length isnt 0, and there are 2 keys pressed
             movi r9, 0x1
             stw r9, 0(r8)
-            movia r8, legatoFrequency
-            stw et, 0(r8)
+            stw et, 8(r8)
             br KEYPRESS_DONE_MARK_DONE
 
             # Just save frequency offset if legato is off
@@ -168,7 +172,7 @@ HANDLE_KEYBOARD_INTERRUPT:
 			movia r8, keyPressed
 			stw r9, 0(r8)
             # disable legato as well
-            movia r8, enableLegato
+            movia r8, legato
             stw r0, 0(r8)
 			br KEY_STORE_LAST
 
@@ -453,10 +457,12 @@ combineWave:
 
 # Do what needs to happen after a key change, e.g. envelope
 handleNoteChange:
-	subi sp, sp, 12
+	subi sp, sp, 20
 	stw ra, 0(sp)
 	stw r16, 4(sp)
 	stw r17, 8(sp)
+	stw r18, 12(sp)
+	stw r19, 16(sp)
 
 	# restore envelope release/attack values
 	movia r16, masterEnvelope
@@ -464,12 +470,60 @@ handleNoteChange:
 	stw r17, 16(r16)
 	ldw r17, 0(r16)
 	stw r17, 4(r16)
+
+    # calculate num of samples needed for legato
+    movia r16, legato
+    ldw r17, 8(r16)
+    movia r18, frequencyOffsetSamples
+    ldw r18, 0(r18)
+    # r18 is how many samples we need to shrink the wave by
+    # to get to target frequency
+    sub r18, r17, r18
+
+    # r18 is how many steps of '2' we need to transition from
+    # current note to the target
+    movi r20, 2
+    div r18, r18, r20
+
+    ldw r17, 4(r16)
     
+    bge r18, r0, handleNoteChange_legatopos
+    br handleNoteChange_legatoneg
+    
+    # r17 is length of legato transition
+    # r18 is how many samples/2 we need to shrink the wave by
+    # to get to target frequency
+    
+    handleNoteChange_legatopos:
+        movi r20, 2
+        stw r20, 12(r16)
+
+        # divide length of legato by number of samples of
+        # the transition between notes
+        div r17, r17, r18
+        stw r17, 16(r16)
+        br handleNoteChange_teardown
+
+    # set negative step size for decreasing legato
+    handleNoteChange_legatoneg:
+        movi r20, -2
+        stw r20, 12(r16)
+
+        # flip the sign of the transition
+        sub r18, r0, r18
+        # divide length of legato by number of samples of
+        # the transition between notes
+        div r17, r17, r18
+        stw r17, 16(r16)
+        br handleNoteChange_teardown
+
     handleNoteChange_teardown:
         ldw ra, 0(sp)
         ldw r16, 4(sp)
         ldw r17, 8(sp)
-        addi sp, sp, 12
+        ldw r18, 12(sp)
+        ldw r19, 16(sp)
+        addi sp, sp, 20
         ret
 
 # Wrap a sample into the envelope
