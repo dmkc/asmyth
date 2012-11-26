@@ -58,8 +58,9 @@ int masterAmplitude;
 // Method headers
 void initialize();
 void playBuffer();
-void createPulse(Queue*, int frequency, signed int amp);
-void createSaw(  Queue*, int frequency, signed int amp);
+void createPulse(Queue*, int samples, signed int amp);
+void createSaw(  Queue*, int samples, signed int amp);
+int  calculateSamples(int frequency);
 int  debug();
 
 /**
@@ -68,12 +69,12 @@ int  debug();
  * Use baseFrequency + frequencyOffset as frequencies.
  */
 void createWaves() {
-	createSaw(&saw1_queue, 
-		baseFrequency + frequencyOffset, masterAmplitude);
-	createPulse(&saw2_queue, 
-		baseFrequency + frequencyOffset - 1, masterAmplitude);
-	createPulse(&pulse_queue, 
-		baseFrequency + frequencyOffset + 1, masterAmplitude);
+    int samples = calculateSamples(baseFrequency + frequencyOffset);
+	createSaw(&saw1_queue, samples, masterAmplitude);
+    samples = calculateSamples(baseFrequency + frequencyOffset - 1);
+	createPulse(&saw2_queue, samples, masterAmplitude);
+    samples = calculateSamples(baseFrequency + frequencyOffset + 1);
+	createPulse(&pulse_queue, samples, masterAmplitude);
 	
 	regenerateWave = 0;
 }

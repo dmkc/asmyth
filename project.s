@@ -1,3 +1,4 @@
+.global calculateSamples
 .global createPulse
 .global createSaw
 .global playPulse
@@ -221,6 +222,16 @@ debug:
 	rdctl r2, ctl0
 	ret
 
+/*
+ * Calculate number of samples needed to represent a complete
+ * wave of `r4` frequency
+ */
+calculateSamples:
+	movia r8, SAMPLE_RATE
+	div r2, r8, r4	
+    ret
+    
+
 /* Takes address of queue in r4, frequency in r5 and volume in r6 and  
  * generates a full wave and populates the pulse buffer
  *
@@ -228,9 +239,7 @@ debug:
 createPulse:
 
 	movia r8, SAMPLE_RATE
-	
-	# total samples per wave
-	div r9, r8, r5	
+    mov r9, r4
 	# store queue length into struct
 	stw r9, 4(r4)
 	
@@ -279,7 +288,7 @@ createSaw:
 	addi r11, r11, 8
 	
 	# total samples per wave is in r9
-	div r9, r8, r5
+	mov r9, r4
 	# store queue length into struct
 	stw r9, 4(r4)
 	
