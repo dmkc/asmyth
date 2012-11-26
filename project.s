@@ -348,19 +348,62 @@ playBuffer:
 		# r9 is the queue address
 		movia r4, pulse_queue
 
-	play_pulse_loop:
-		beq r12, r0,  play_pulse_loop_end
+	play_sample_loop:
+		beq r12, r0,  play_sample_loop_end
 
-		call combineWave
-		mov r4, r2
-		call wrapInEnvelope
-		stwio r2, 8(r8)
-		stwio r2, 12(r8)
-		
-		subi r12, r12, 1
-		br play_pulse_loop
+        # check if legato is on
+        movia r13, legato
+        ldw r14, 0(r13)
+        # if it's not, jump to combining waves
+        beq r14, r0, play_sample_loop_combine
+        # Check length of legato; doubles as an on/off switch
+        ldw r14, 4(r13)
+        beq r14, r0, play_sample_loop_combine
+        # if it's not, jump to combining waves
 
-	play_pulse_loop_end:
+        # Legato is ON
+        play_sample_loop_legato:
+            # Check if we've reached the end of legato length
+            # for this iteration
+            ldw r14, 20(r13)
+            ble r14, r0, play_sample_loop_legato_reset
+            # If we haven't, just decrease counter
+            subi r14, r14, 1
+            br play_sample_loop_combine
+
+            # Reset legato
+            play_sample_loop_legato_reset:
+                # reset counter
+                ldw r14, 16(r13)
+                stw r14, 20(r13)
+
+                # add/subtract samples and flag regeneration
+                # r15 is step size
+                ldw r15, 12(r13)
+                movia r14, frequencyOffsetSamples
+                ldw r14, 0(r14)
+                add r14, r14, r15
+                # Store new frequency
+                movia r15, frequencyOffsetSamples
+                stw r14, 0(r15)
+                # Mark oscillators to regenerate
+                movi r14, 0x1
+                movia r15, regenerateWave
+                stw r14, 0(r15)
+                br playBuffer
+
+
+        play_sample_loop_combine:
+            call combineWave
+            mov r4, r2
+            call wrapInEnvelope
+            stwio r2, 8(r8)
+            stwio r2, 12(r8)
+            
+            subi r12, r12, 1
+            br play_sample_loop
+
+	play_sample_loop_end:
 		ldw ra, 0(sp)
 		addi sp, sp, 4
 		ret
