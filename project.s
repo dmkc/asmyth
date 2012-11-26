@@ -12,6 +12,7 @@
 .equ ADDR_SLIDESWITCHES, 0x10000040
 .equ ADDR_RLED, 0x10000000
 .equ ADDR_PS2,0x10000100
+.equ ADDR_JP1, 0x10000060
 .equ SAMPLE_RATE, 48000
 
 # Interrupt handlers
@@ -187,6 +188,11 @@ HANDLE_KEYBOARD_INTERRUPT:
 	
 .text
 initialize:
+	# initialize lego controller
+	movia r10, ADDR_JP1
+	movia r9, 0x07f557ff
+	stwio r9, 4(r8)
+
 	# initialize audio codec
 	movia r10, ADDR_AUDIODACFIFO
 	movi r9, 0b10
@@ -444,13 +450,19 @@ combineWave:
 
 # Do what needs to happen after a key change, e.g. envelope
 handleNoteChange:
-	subi sp, sp, 12
+	subi sp, sp, 16
 	stw ra, 0(sp)
 	stw r16, 4(sp)
 	stw r17, 8(sp)
+	stw r2, 12(sp)
+
+	movia r16, masterEnvelope
+	call getAdjustEnvelopSize
+	ldw r17, 0(r16)
+	sub r17, r17, r2
+	stw r17, 0(r16)
 
 	# restore envelope release/attack values
-	movia r16, masterEnvelope
 	ldw r17, 12(r16)
 	stw r17, 16(r16)
 	ldw r17, 0(r16)
@@ -460,8 +472,51 @@ handleNoteChange:
         ldw ra, 0(sp)
         ldw r16, 4(sp)
         ldw r17, 8(sp)
-        addi sp, sp, 12
+	stw r2, 12(sp0
+        addi sp, sp, 16
         ret
+
+# Poll sensors to check for input. Change envelope sized based on sensors.
+getAdjustEnvelopeSize:
+	subi sp, sp, 16
+	stw ra, 0(sp)
+	stw r16, 4(sp)
+	stw r17, 8(sp)
+	stw r18, 12(sp)
+	
+	movia r16, ADDR_JP1
+	#enable sensor 0
+	movia r17, 0xfffffbff
+	stwio r17, 0(r16)
+
+	ldwio r17, 0(r16)
+	srli r17, r17, 11
+	andi r17, r17, 0x1
+	neq r17, r0, getAdjustEnvelopeSizeTeardown
+	# Else, sensor 0 is valid (low)
+	ldwio r17, 0(r16)
+	srli r17, r17, 27
+	andi r17, r17, 0x0000000f
+
+	movia r16, maxReleaseLength
+	movia r18, minReleaseLength
+	ldb r16, 0(r16)
+	ldb r18, 0(r18)
+	sub r16, r16, r18
+	
+	movi r18, 0xf
+	muli r16, r16, r17
+	div r16, r16, r18
+	#r16 is the amount to adjust the release by
+	mov r2, r16
+
+getAdjustEnvelopeSizeTeardown:
+	ldw ra, 0(sp)
+	ldw r16, 4(sp)
+	ldw r17, 8(sp)
+	ldw r18, 12(sp)
+	addi sp, sp, 8
+	ret
 
 # Wrap a sample into the envelope
 wrapInEnvelope:
