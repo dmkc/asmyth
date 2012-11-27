@@ -460,9 +460,10 @@ handleNoteChange:
 
 	movia r16, masterEnvelope
 	call getAdjustEnvelopeSize
-	ldw r17, 0(r16)
+	movia r17, maxReleaseLength
+	ldw r17, 0(r17)
 	sub r17, r17, r2
-	stw r17, 0(r16)
+	stw r17, 12(r16)
 
 	# restore envelope release/attack values
 	ldw r17, 12(r16)
@@ -507,7 +508,7 @@ getAdjustEnvelopeSize:
 	ldw r18, 0(r18)
 	sub r16, r16, r18
 	
-	movi r18, 0xf
+	movi r18, 0xb
 	mul r16, r16, r17
 	div r16, r16, r18
 	#r16 is the amount to adjust the release by
