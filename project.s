@@ -21,10 +21,12 @@
 .section .exceptions, "ax"
 IHANDLER:
 	#save context
-	subi sp, sp, 12
+	subi sp, sp, 20
 	stw ra, 0(sp)
 	stw r8, 4(sp)
 	stw r9, 8(sp)
+	stw r10, 12(sp)
+	stw r11, 16(sp)
 	
 	#determine interrupt source
 	rdctl et, ctl4
@@ -42,7 +44,27 @@ IHANDLER:
 
 # AUDIO INTERRUPT HANDLING
 HANDLE_AUDIO_INTERRUPT:
+	subi sp, sp, 28
+	stw ra, 0(sp)
+	stw r11, 4(sp)
+	stw r12, 8(sp)
+	stw r13, 12(sp)
+	stw r14, 16(sp)
+	stw r15, 20(sp)
+	stw r16, 24(sp)
+
 	call playBuffer
+
+
+	ldw ra, 0(sp)
+	ldw r11, 4(sp)
+	ldw r12, 8(sp)
+	ldw r13, 12(sp)
+	ldw r14, 16(sp)
+	ldw r15, 20(sp)
+	ldw r16, 24(sp)
+
+	addi sp, sp, 28
 	br DONE_INTERRUPT
 	
 
@@ -75,57 +97,57 @@ HANDLE_KEYBOARD_INTERRUPT:
 		KEY_2:
 			movi r9, 0x1d
 			bne et, r9, KEY_3
-			movi r9, 800
+			movi r9, 806
 			br KEYPRESS_DONE
 		KEY_3:
 			movi r9, 0x1b
 			bne et, r9, KEY_4
-			movi r9, 750
+			movi r9, 748
 			br KEYPRESS_DONE
 		KEY_4:
 			movi r9, 0x24
 			bne et, r9, KEY_5
-			movi r9, 696
+			movi r9, 698
 			br KEYPRESS_DONE
 		KEY_5:
 			movi r9, 0x23
 			bne et, r9, KEY_6
-			movi r9, 658
+			movi r9, 655
 			br KEYPRESS_DONE
 		KEY_6:
 			movi r9, 0x2b
 			bne et, r9, KEY_7
-			movi r9, 615
+			movi r9, 616
 			br KEYPRESS_DONE
 		KEY_7:
 			movi r9, 0x2c
 			bne et, r9, KEY_8
-			movi r9, 578
+			movi r9, 582
 			br KEYPRESS_DONE
 		KEY_8:
 			movi r9, 0x34
 			bne et, r9, KEY_9
-			movi r9, 552
+			movi r9, 551
 			br KEYPRESS_DONE
 		KEY_9:
 			movi r9, 0x35
 			bne et, r9, KEY_10
-			movi r9, 522
+			movi r9, 524
 			br KEYPRESS_DONE
 		KEY_10:
 			movi r9, 0x33
 			bne et, r9, KEY_11
-			movi r9, 500
+			movi r9, 499
 			br KEYPRESS_DONE
 		KEY_11:
 			movi r9, 0x3c
 			bne et, r9, KEY_12
-			movi r9, 475
+			movi r9, 476
 			br KEYPRESS_DONE
 		KEY_12:
 			movi r9, 0x3b
 			bne et, r9, KEY_13
-			movi r9, 453
+			movi r9, 455
 			br KEYPRESS_DONE
 		KEY_13:
 			movi r9, 0x42
@@ -135,7 +157,16 @@ HANDLE_KEYBOARD_INTERRUPT:
 		
 		KEYPRESS_DONE:
             mov et, r9
+            movia r10, ADDR_SLIDESWITCHES
+	
+			ldwio r11, 0(r10)
+			andi r11, r11, 0b1000
+			movi r10, 0b1000
+			bne r11, r10, KEYPRESS_DONE_no_multiplier
+			movi r10, 2
+			div et, et, r10
 
+			KEYPRESS_DONE_no_multiplier:
             # Figure out if we need legato
 			movia r8, keyPressed
             ldw r8, 0(r8)
@@ -188,7 +219,9 @@ HANDLE_KEYBOARD_INTERRUPT:
 		ldw ra, 0(sp)
 		ldw r8, 4(sp)
 		ldw r9, 8(sp)
-		addi sp, sp, 12
+		ldw r10, 12(sp)
+		ldw r11, 16(sp)
+		addi sp, sp, 20
 
 		subi ea, ea, 4
 		eret
@@ -617,7 +650,7 @@ getAdjustEnvelopeSize:
 	movia r16, ADDR_JP1
 	# enable sensor 0
 	movia r17, 0xfffffbff
-	stwio r17, 0(r16)
+	stwio r17, 0(r16)a
 
 	ldwio r17, 0(r16)
 	srli r17, r17, 11
