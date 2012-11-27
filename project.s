@@ -148,7 +148,7 @@ HANDLE_KEYBOARD_INTERRUPT:
             movi r9, 0x1
             stw r9, 0(r8)
             stw et, 8(r8)
-            br KEYPRESS_DONE_SAVE
+            br KEYPRESS_DONE_MARK_DONE
 
             # Just save frequency offset if legato is off
             KEYPRESS_DONE_SAVE:
@@ -340,33 +340,40 @@ playBuffer:
 		movia r4, pulse_queue
 
 	play_sample_loop:
-		beq r12, r0,  play_sample_loop_end
+		ble r12, r0, play_sample_loop_end
 
         # check if legato is on
         movia r13, legato
-        ldw r14, 0(r13)
+        ldw r14, 24(r13)
         # if it's not, jump to combining waves
-        beq r14, r0, play_sample_loop_combine
-        # Check length of legato; doubles as an on/off switch
-        ldw r14, 4(r13)
-        beq r14, r0, play_sample_loop_combine
+        ble r14, r0, play_sample_loop_combine
         # if it's not, jump to combining waves
 
         # Legato is ON
         play_sample_loop_legato:
-            # Check if we've reached the end of legato length
+            # Check if we've reached the end of legato counter
             # for this iteration
-            ldw r14, 20(r13)
-            ble r14, r0, play_sample_loop_legato_reset
+            ldw r14, 16(r13)
+            ble r14, r0, play_sample_loop_legato_reset_counter
+
             # If we haven't, just decrease counter
             subi r14, r14, 1
+            stw r14, 16(r13)
             br play_sample_loop_combine
 
-            # Reset legato
-            play_sample_loop_legato_reset:
+            # Reset legato counter if more iterations left
+            play_sample_loop_legato_reset_counter:
+            	# check if we're done legato-ing
+                ldw r14, 24(r13)
+                ble r14, r0, play_sample_loop_legato_done
+
+                # more iterations left
+                subi r14, r14, 1
+                stw r14, 24(r13)
+
                 # reset counter
-                ldw r14, 16(r13)
-                stw r14, 20(r13)
+                ldw r14, 20(r13)
+                stw r14, 16(r13)
 
                 # add/subtract samples and flag regeneration
                 # r15 is step size
@@ -376,6 +383,7 @@ playBuffer:
                 add r14, r14, r15
                 # Store new frequency
                 movia r15, frequencyOffsetSamples
+
                 stw r14, 0(r15)
                 # Mark oscillators to regenerate
                 movi r14, 0x1
@@ -383,6 +391,19 @@ playBuffer:
                 stw r14, 0(r15)
                 br playBuffer
 
+            play_sample_loop_legato_done:
+            	# check values of counter and iterations
+            	ldw r14, 16(r13)
+            	ldw r14, 16(r13)
+            	# mark legato as done
+            	stw r0, 0(r13)
+            	# check value of samples
+            	movia r14, frequencyOffsetSamples
+            	ldw r14, 0(r14)
+            	movi r14, 0x1
+                movia r15, regenerateWave
+                stw r14, 0(r15)
+            	br playBuffer
 
         play_sample_loop_combine:
             call combineWave
@@ -505,8 +526,13 @@ handleNoteChange:
 	ldw r17, 0(r16)
 	stw r17, 4(r16)
 
-    # calculate num of samples needed for legato
+    # Do we need legato?
     movia r16, legato
+    ldw r17, 0(r16)
+    beq r0, r17, handleNoteChange_teardown
+    # calculate num of samples needed for legato
+    
+    # r17 is the target number of samples
     ldw r17, 8(r16)
     movia r18, frequencyOffsetSamples
     ldw r18, 0(r18)
@@ -514,11 +540,7 @@ handleNoteChange:
     # to get to target frequency
     sub r18, r17, r18
 
-    # r18 is how many steps of '2' we need to transition from
-    # current note to the target
-    movi r20, 2
-    div r18, r18, r20
-
+    # r17 is length of legato (24000)
     ldw r17, 4(r16)
     
     bge r18, r0, handleNoteChange_legatopos
@@ -529,26 +551,28 @@ handleNoteChange:
     # to get to target frequency
     
     handleNoteChange_legatopos:
-        movi r20, 2
+        movi r20, 1
         stw r20, 12(r16)
 
         # divide length of legato by number of samples of
         # the transition between notes
         div r17, r17, r18
-        stw r17, 16(r16)
+        stw r17, 20(r16)
+        stw r18, 24(r16)
         br handleNoteChange_teardown
 
     # set negative step size for decreasing legato
     handleNoteChange_legatoneg:
-        movi r20, -2
+        movi r20, -1
         stw r20, 12(r16)
 
         # flip the sign of the transition
         sub r18, r0, r18
-        # divide length of legato by number of samples of
+		# divide length of legato by number of samples of
         # the transition between notes
         div r17, r17, r18
-        stw r17, 16(r16)
+        stw r17, 20(r16)
+        stw r18, 24(r16)
         br handleNoteChange_teardown
 
     handleNoteChange_teardown:
