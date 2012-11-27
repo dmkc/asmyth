@@ -175,8 +175,8 @@ HANDLE_KEYBOARD_INTERRUPT:
 			movia r8, keyPressed
 			stw r0, 0(r8)
             # disable legato as well
-            movia r8, legato
-            stw r0, 0(r8)
+            #movia r8, legato
+            #stw r0, 0(r8)
 			br KEY_STORE_LAST
 
 	KEY_STORE_LAST:
@@ -204,18 +204,6 @@ initialize:
 	movia r10, ADDR_AUDIODACFIFO
 	movi r9, 0b10
 	stwio r9, 0(r10)
-	
-	# initialize timer
-	/*movia r10, ADDR_TIMER
-	movia r9, 50000000 
-	stwio r9, 8(r10)
-	srli r9, r9, 16
-	stwio r9, 12(r10)
-	# clear the timer
-	stwio r0, 0(r10)
-	# start, continue, interrupt enable
-	movui r9, 0b111			
-	stwio r9, 4(r10)*/	
 	
 	# initalize ps2
 	movia r10, ADDR_PS2
@@ -351,6 +339,9 @@ playBuffer:
 
         # check if legato is on
         movia r13, legato
+        ldw r14, 0(r13)
+        bne r14, r0, play_sample_loop_legato
+
         ldw r14, 24(r13)
         # if it's not, jump to combining waves
         ble r14, r0, play_sample_loop_combine
@@ -415,10 +406,15 @@ playBuffer:
         play_sample_loop_combine:
             call combineWave
             mov r4, r2
+
+            # if two keys pressed don't wrap first key in envelope
+            movia r14, legato
+            ldw r14, 24(r14)
+            bne r14, r0, skipEnvelope
             call wrapInEnvelope
-            stwio r2, 8(r8)
-            stwio r2, 12(r8)
-            
+        skipEnvelope:  
+       		stwio r2, 8(r8)
+            stwio r2, 12(r8)  
             subi r12, r12, 1
             br play_sample_loop
 
@@ -519,12 +515,17 @@ combineWave:
 
 # Do what needs to happen after a key change, e.g. envelope
 handleNoteChange:
-	subi sp, sp, 20
+	subi sp, sp, 24
 	stw ra, 0(sp)
 	stw r16, 4(sp)
 	stw r17, 8(sp)
 	stw r18, 12(sp)
 	stw r19, 16(sp)
+	stw r20, 20(sp)
+
+	#movia r16, legato
+	#ldw r17, 0(r16)
+	#bne r0, r17, handleNoteChange_doLegato
 
 	movia r16, masterEnvelope
 	call getAdjustEnvelopeSize
@@ -540,11 +541,18 @@ handleNoteChange:
 	stw r17, 4(r16)
 
     # Do we need legato?
+handleNoteChange_doLegato:
     movia r16, legato
+	/*call adjustLegatoLength
+	movia r17, maxLegatoLength
+	ldw r17, 0(r17)
+	sub r17, r17, r2
+	stw r17, 4(r16)*/
+
     ldw r17, 0(r16)
     beq r0, r17, handleNoteChange_teardown
     # calculate num of samples needed for legato
-    
+
     # r17 is the target number of samples
     ldw r17, 8(r16)
     movia r18, frequencyOffsetSamples
@@ -594,7 +602,8 @@ handleNoteChange:
         ldw r17, 8(sp)
         ldw r18, 12(sp)
         ldw r19, 16(sp)
-        addi sp, sp, 20
+        ldw r20, 20(sp)
+        addi sp, sp, 24
         ret
 
 # Poll sensors to check for input. Change envelope sized based on sensors.
@@ -632,13 +641,56 @@ getAdjustEnvelopeSize:
 	#r16 is the amount to adjust the release by
 	mov r2, r16
 
-getAdjustEnvelopeSizeTeardown:
-	ldw ra, 0(sp)
-	ldw r16, 4(sp)
-	ldw r17, 8(sp)
-	ldw r18, 12(sp)
-	addi sp, sp, 16
-	ret
+	getAdjustEnvelopeSizeTeardown:
+		ldw ra, 0(sp)
+		ldw r16, 4(sp)
+		ldw r17, 8(sp)
+		ldw r18, 12(sp)
+		addi sp, sp, 16
+		ret
+
+adjustLegatoLength:
+	subi sp, sp, 16
+	stw ra, 0(sp)
+	stw r16, 4(sp)
+	stw r17, 8(sp)
+	stw r18, 12(sp)
+	
+	movia r16, ADDR_JP1
+	# enable sensor 0
+	movia r17, 0xffffefff
+	stwio r17, 0(r16)
+
+	ldwio r17, 0(r16)
+	srli r17, r17, 13
+	andi r17, r17, 0x1
+	cmpeqi r17, r17, 0x1
+	bne r17, r0, adjustLegatoLength_teardown
+	# Else, sensor 0 is valid (low)
+	ldwio r17, 0(r16)
+	srli r17, r17, 27
+	andi r17, r17, 0x0000000f
+
+	movia r16, maxLegatoLength
+	movia r18, minLegatoLength
+	ldw r16, 0(r16)
+	ldw r18, 0(r18)
+	sub r16, r16, r18
+	
+	movi r18, 0xb
+	mul r16, r16, r17
+	div r16, r16, r18
+	#r16 is the amount to adjust the release by
+	mov r2, r16
+
+	adjustLegatoLength_teardown:
+		ldw ra, 0(sp)
+		ldw r16, 4(sp)
+		ldw r17, 8(sp)
+		ldw r18, 12(sp)
+		addi sp, sp, 16
+		ret
+
 
 # Wrap a sample into the envelope
 wrapInEnvelope:
@@ -647,9 +699,11 @@ wrapInEnvelope:
     # otherwise, decrease volume down sample by sample
     # starting at masterAmplitude down to 0
     # Remember to drop down to 0 for positive and negative values.
-    subi sp, sp, 8
+    subi sp, sp, 16
 	stw ra, 0(sp)
 	stw r16, 4(sp)
+	stw r17, 8(sp)
+	stw r18, 12(sp)
 
 	movia r16, keyPressed
 	ldw r16, 0(r16)
@@ -708,5 +762,7 @@ wrapInEnvelope:
 	wrapInEnvelope_teardown:
 		ldw ra,  0(sp)
 		ldw r16, 4(sp)
-		addi sp, sp, 8
+		ldw r17, 8(sp)
+		ldw r18, 12(sp)
+		addi sp, sp, 16
 		ret
