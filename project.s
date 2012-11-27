@@ -55,13 +55,14 @@ HANDLE_KEYBOARD_INTERRUPT:
 	movia r8, lastKeyInterrupt
 	ldw r9, 0(r8)
 	
+	# last key interrupt was an escape sequence
 	movi r8, 0xfffffff0
 	beq r9, r8, KEY_STORE_LAST
 	# check if key has been released
 	beq et, r8, KEY_BREAK
 
 	# figure out frequency multiplier based on key code
-	movia r8, frequencyOffsetSamples;
+	movia r8, frequencyOffsetSamples
 
 	KEYPRESS_HANDLE:	
 		KEY_1:
@@ -147,10 +148,11 @@ HANDLE_KEYBOARD_INTERRUPT:
             movi r9, 0x1
             stw r9, 0(r8)
             stw et, 8(r8)
-            br KEYPRESS_DONE_MARK_DONE
+            br KEYPRESS_DONE_SAVE
 
             # Just save frequency offset if legato is off
             KEYPRESS_DONE_SAVE:
+                movia r8, frequencyOffsetSamples
                 stw et, 0(r8)
             KEYPRESS_DONE_MARK_DONE:
                 # mark key as pressed 
@@ -168,9 +170,8 @@ HANDLE_KEYBOARD_INTERRUPT:
 
 		# set keyPressed to false
 		KEY_BREAK:
-			mov r9, r0
 			movia r8, keyPressed
-			stw r9, 0(r8)
+			stw r0, 0(r8)
             # disable legato as well
             movia r8, legato
             stw r0, 0(r8)
@@ -226,16 +227,6 @@ debug:
 	rdctl r2, ctl0
 	ret
 
-/*
- * Calculate number of samples needed to represent a complete
- * wave of `r4` frequency
- */
-calculateSamples:
-	movia r8, SAMPLE_RATE
-	div r2, r8, r4	
-    ret
-    
-
 /* Takes address of queue in r4, frequency in r5 and volume in r6 and  
  * generates a full wave and populates the pulse buffer
  *
@@ -243,7 +234,7 @@ calculateSamples:
 createPulse:
 
 	movia r8, SAMPLE_RATE
-    mov r9, r4
+    mov r9, r5
 	# store queue length into struct
 	stw r9, 4(r4)
 	
@@ -292,7 +283,7 @@ createSaw:
 	addi r11, r11, 8
 	
 	# total samples per wave is in r9
-	mov r9, r4
+	mov r9, r5
 	# store queue length into struct
 	stw r9, 4(r4)
 	
