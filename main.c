@@ -49,6 +49,8 @@ struct Legato {
     int stepSize;
     // increase num of samples by 2 every `counter`
     int counter;
+    int counterLength;
+    int totalSteps;
 };
 
 typedef struct Legato Legato;
@@ -72,7 +74,6 @@ void initialize();
 void playBuffer();
 void createPulse(Queue*, int samples, signed int amp);
 void createSaw(  Queue*, int samples, signed int amp);
-int  calculateSamples(int frequency);
 int  debug();
 
 /**
@@ -82,8 +83,8 @@ int  debug();
  */
 void createWaves() {
 	createSaw(&saw1_queue, frequencyOffsetSamples, masterAmplitude);
-	createPulse(&saw2_queue, frequencyOffsetSamples, masterAmplitude);
-	createPulse(&pulse_queue, frequencyOffsetSamples, masterAmplitude);
+	createPulse(&saw2_queue, frequencyOffsetSamples+5, masterAmplitude);
+	createPulse(&pulse_queue, frequencyOffsetSamples-5, masterAmplitude);
 	
 	regenerateWave = 0;
 }
@@ -94,6 +95,7 @@ void createWaves() {
  */
 int main() {
 	frequencyOffset = 0;
+	frequencyOffsetSamples = 873;
 	baseFrequency = 55;
     masterAmplitude = 90000000;
     //default attack is half second long
@@ -104,7 +106,7 @@ int main() {
     masterEnvelope.releaseStep = masterAmplitude/masterEnvelope.releaseLength;
 
     // Legato settings
-    legato.length = 48000;
+    legato.length = 24000;
 
 	createWaves();
 	initialize();
