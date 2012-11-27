@@ -7,6 +7,7 @@
 .global debug
 .global IHANDLER
 .global wrapInEnvelope
+.global getAdjustEnvelopeSize
 
 .equ ADDR_AUDIODACFIFO, 0x10003040
 .equ ADDR_TIMER, 0x10002000
@@ -62,7 +63,7 @@ HANDLE_KEYBOARD_INTERRUPT:
 	beq et, r8, KEY_BREAK
 
 	# figure out frequency multiplier based on key code
-	movia r8, frequencyOffset;
+	movia r8, frequencyOffset
 
 	KEYPRESS_HANDLE:	
 		KEY_1:
@@ -148,6 +149,7 @@ HANDLE_KEYBOARD_INTERRUPT:
 
             # Just save frequency offset if legato is off
             KEYPRESS_DONE_SAVE:
+            	movia r8, frequencyOffset
                 stw et, 0(r8)
             KEYPRESS_DONE_MARK_DONE:
                 # mark key as pressed 
@@ -192,7 +194,7 @@ initialize:
 	# initialize lego controller
 	movia r10, ADDR_JP1
 	movia r9, 0x07f557ff
-	stwio r9, 4(r8)
+	stwio r9, 4(r10)
 
 	# initialize audio codec
 	movia r10, ADDR_AUDIODACFIFO
@@ -466,10 +468,11 @@ handleNoteChange:
 	stw r2, 12(sp)
 
 	movia r16, masterEnvelope
-	call getAdjustEnvelopSize
-	ldw r17, 0(r16)
+	call getAdjustEnvelopeSize
+	movia r17, maxReleaseLength
+	ldw r17, 0(r17)
 	sub r17, r17, r2
-	stw r17, 0(r16)
+	stw r17, 12(r16)
 
 	# restore envelope release/attack values
 	ldw r17, 12(r16)
@@ -481,7 +484,7 @@ handleNoteChange:
         ldw ra, 0(sp)
         ldw r16, 4(sp)
         ldw r17, 8(sp)
-	stw r2, 12(sp0
+		stw r2, 12(sp)
         addi sp, sp, 16
         ret
 
@@ -494,14 +497,15 @@ getAdjustEnvelopeSize:
 	stw r18, 12(sp)
 	
 	movia r16, ADDR_JP1
-	#enable sensor 0
+	# enable sensor 0
 	movia r17, 0xfffffbff
 	stwio r17, 0(r16)
 
 	ldwio r17, 0(r16)
 	srli r17, r17, 11
 	andi r17, r17, 0x1
-	neq r17, r0, getAdjustEnvelopeSizeTeardown
+	cmpeqi r17, r17, 0x1
+	bne r17, r0, getAdjustEnvelopeSizeTeardown
 	# Else, sensor 0 is valid (low)
 	ldwio r17, 0(r16)
 	srli r17, r17, 27
@@ -509,12 +513,12 @@ getAdjustEnvelopeSize:
 
 	movia r16, maxReleaseLength
 	movia r18, minReleaseLength
-	ldb r16, 0(r16)
-	ldb r18, 0(r18)
+	ldw r16, 0(r16)
+	ldw r18, 0(r18)
 	sub r16, r16, r18
 	
-	movi r18, 0xf
-	muli r16, r16, r17
+	movi r18, 0xb
+	mul r16, r16, r17
 	div r16, r16, r18
 	#r16 is the amount to adjust the release by
 	mov r2, r16
@@ -524,7 +528,7 @@ getAdjustEnvelopeSizeTeardown:
 	ldw r16, 4(sp)
 	ldw r17, 8(sp)
 	ldw r18, 12(sp)
-	addi sp, sp, 8
+	addi sp, sp, 16
 	ret
 
 # Wrap a sample into the envelope
