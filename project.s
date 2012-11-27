@@ -57,79 +57,80 @@ HANDLE_KEYBOARD_INTERRUPT:
 	movia r8, lastKeyInterrupt
 	ldw r9, 0(r8)
 	
+	# last key interrupt was an escape sequence
 	movi r8, 0xfffffff0
 	beq r9, r8, KEY_STORE_LAST
 	# check if key has been released
 	beq et, r8, KEY_BREAK
 
 	# figure out frequency multiplier based on key code
-	movia r8, frequencyOffset
+	movia r8, frequencyOffsetSamples
 
 	KEYPRESS_HANDLE:	
 		KEY_1:
 			movi r9, 0x1c
 			bne et, r9, KEY_2
-			movi r9, 0
+			movi r9, 873
 			br KEYPRESS_DONE
 		KEY_2:
 			movi r9, 0x1d
 			bne et, r9, KEY_3
-			movi r9, 5
+			movi r9, 800
 			br KEYPRESS_DONE
 		KEY_3:
 			movi r9, 0x1b
 			bne et, r9, KEY_4
-			movi r9, 9
+			movi r9, 750
 			br KEYPRESS_DONE
 		KEY_4:
 			movi r9, 0x24
 			bne et, r9, KEY_5
-			movi r9, 14
+			movi r9, 696
 			br KEYPRESS_DONE
 		KEY_5:
 			movi r9, 0x23
 			bne et, r9, KEY_6
-			movi r9, 18
+			movi r9, 658
 			br KEYPRESS_DONE
 		KEY_6:
 			movi r9, 0x2b
 			bne et, r9, KEY_7
-			movi r9, 23
+			movi r9, 615
 			br KEYPRESS_DONE
 		KEY_7:
 			movi r9, 0x2c
 			bne et, r9, KEY_8
-			movi r9, 28
+			movi r9, 578
 			br KEYPRESS_DONE
 		KEY_8:
 			movi r9, 0x34
 			bne et, r9, KEY_9
-			movi r9, 32
+			movi r9, 552
 			br KEYPRESS_DONE
 		KEY_9:
 			movi r9, 0x35
 			bne et, r9, KEY_10
-			movi r9, 37
+			movi r9, 522
 			br KEYPRESS_DONE
 		KEY_10:
 			movi r9, 0x33
 			bne et, r9, KEY_11
-			movi r9, 41
+			movi r9, 500
 			br KEYPRESS_DONE
 		KEY_11:
 			movi r9, 0x3c
 			bne et, r9, KEY_12
-			movi r9, 46
+			movi r9, 475
 			br KEYPRESS_DONE
 		KEY_12:
 			movi r9, 0x3b
 			bne et, r9, KEY_13
-			movi r9, 51
+			movi r9, 453
 			br KEYPRESS_DONE
 		KEY_13:
 			movi r9, 0x42
 			bne et, r9, KEYPRESS_UNKNOWN
-			movi r9, 55
+			movi r9, 436
 			br KEYPRESS_DONE
 		
 		KEYPRESS_DONE:
@@ -140,16 +141,20 @@ HANDLE_KEYBOARD_INTERRUPT:
             ldw r8, 0(r8)
             beq r0, r8, KEYPRESS_DONE_SAVE
             # If key already marked pressed, then turn on legato
-            movia r8, enableLegato
+            movia r8, legato
+            ldw r9, 4(r8)
+            # Do nothing if legato length is 0
+            beq r0, r9, KEYPRESS_DONE_SAVE
+
+            # Legato length isnt 0, and there are 2 keys pressed
             movi r9, 0x1
             stw r9, 0(r8)
-            movia r8, legatoFrequency
-            stw et, 0(r8)
+            stw et, 8(r8)
             br KEYPRESS_DONE_MARK_DONE
 
             # Just save frequency offset if legato is off
             KEYPRESS_DONE_SAVE:
-            	movia r8, frequencyOffset
+                movia r8, frequencyOffsetSamples
                 stw et, 0(r8)
             KEYPRESS_DONE_MARK_DONE:
                 # mark key as pressed 
@@ -167,11 +172,10 @@ HANDLE_KEYBOARD_INTERRUPT:
 
 		# set keyPressed to false
 		KEY_BREAK:
-			mov r9, r0
 			movia r8, keyPressed
-			stw r9, 0(r8)
+			stw r0, 0(r8)
             # disable legato as well
-            movia r8, enableLegato
+            movia r8, legato
             stw r0, 0(r8)
 			br KEY_STORE_LAST
 
@@ -230,16 +234,6 @@ debug:
 	rdctl r2, ctl0
 	ret
 
-/*
- * Calculate number of samples needed to represent a complete
- * wave of `r4` frequency
- */
-calculateSamples:
-	movia r8, SAMPLE_RATE
-	div r2, r8, r4	
-    ret
-    
-
 /* Takes address of queue in r4, frequency in r5 and volume in r6 and  
  * generates a full wave and populates the pulse buffer
  *
@@ -247,7 +241,7 @@ calculateSamples:
 createPulse:
 
 	movia r8, SAMPLE_RATE
-    mov r9, r4
+    mov r9, r5
 	# store queue length into struct
 	stw r9, 4(r4)
 	
@@ -296,7 +290,7 @@ createSaw:
 	addi r11, r11, 8
 	
 	# total samples per wave is in r9
-	mov r9, r4
+	mov r9, r5
 	# store queue length into struct
 	stw r9, 4(r4)
 	
@@ -352,19 +346,83 @@ playBuffer:
 		# r9 is the queue address
 		movia r4, pulse_queue
 
-	play_pulse_loop:
-		beq r12, r0,  play_pulse_loop_end
+	play_sample_loop:
+		ble r12, r0, play_sample_loop_end
 
-		call combineWave
-		mov r4, r2
-		call wrapInEnvelope
-		stwio r2, 8(r8)
-		stwio r2, 12(r8)
-		
-		subi r12, r12, 1
-		br play_pulse_loop
+        # check if legato is on
+        movia r13, legato
+        ldw r14, 24(r13)
+        # if it's not, jump to combining waves
+        ble r14, r0, play_sample_loop_combine
+        # if it's not, jump to combining waves
 
-	play_pulse_loop_end:
+        # Legato is ON
+        play_sample_loop_legato:
+            # Check if we've reached the end of legato counter
+            # for this iteration
+            ldw r14, 16(r13)
+            ble r14, r0, play_sample_loop_legato_reset_counter
+
+            # If we haven't, just decrease counter
+            subi r14, r14, 1
+            stw r14, 16(r13)
+            br play_sample_loop_combine
+
+            # Reset legato counter if more iterations left
+            play_sample_loop_legato_reset_counter:
+            	# check if we're done legato-ing
+                ldw r14, 24(r13)
+                ble r14, r0, play_sample_loop_legato_done
+
+                # more iterations left
+                subi r14, r14, 1
+                stw r14, 24(r13)
+
+                # reset counter
+                ldw r14, 20(r13)
+                stw r14, 16(r13)
+
+                # add/subtract samples and flag regeneration
+                # r15 is step size
+                ldw r15, 12(r13)
+                movia r14, frequencyOffsetSamples
+                ldw r14, 0(r14)
+                add r14, r14, r15
+                # Store new frequency
+                movia r15, frequencyOffsetSamples
+
+                stw r14, 0(r15)
+                # Mark oscillators to regenerate
+                movi r14, 0x1
+                movia r15, regenerateWave
+                stw r14, 0(r15)
+                br playBuffer
+
+            play_sample_loop_legato_done:
+            	# check values of counter and iterations
+            	ldw r14, 16(r13)
+            	ldw r14, 16(r13)
+            	# mark legato as done
+            	stw r0, 0(r13)
+            	# check value of samples
+            	movia r14, frequencyOffsetSamples
+            	ldw r14, 0(r14)
+            	movi r14, 0x1
+                movia r15, regenerateWave
+                stw r14, 0(r15)
+            	br playBuffer
+
+        play_sample_loop_combine:
+            call combineWave
+            mov r4, r2
+            call wrapInEnvelope
+            stwio r2, 8(r8)
+            stwio r2, 12(r8)
+            
+            subi r12, r12, 1
+            br play_sample_loop
+
+	play_sample_loop_end:
 		ldw ra, 0(sp)
 		addi sp, sp, 4
 		ret
@@ -461,11 +519,12 @@ combineWave:
 
 # Do what needs to happen after a key change, e.g. envelope
 handleNoteChange:
-	subi sp, sp, 16
+	subi sp, sp, 20
 	stw ra, 0(sp)
 	stw r16, 4(sp)
 	stw r17, 8(sp)
-	stw r2, 12(sp)
+	stw r18, 12(sp)
+	stw r19, 16(sp)
 
 	movia r16, masterEnvelope
 	call getAdjustEnvelopeSize
@@ -479,13 +538,63 @@ handleNoteChange:
 	stw r17, 16(r16)
 	ldw r17, 0(r16)
 	stw r17, 4(r16)
+
+    # Do we need legato?
+    movia r16, legato
+    ldw r17, 0(r16)
+    beq r0, r17, handleNoteChange_teardown
+    # calculate num of samples needed for legato
     
+    # r17 is the target number of samples
+    ldw r17, 8(r16)
+    movia r18, frequencyOffsetSamples
+    ldw r18, 0(r18)
+    # r18 is how many samples we need to shrink the wave by
+    # to get to target frequency
+    sub r18, r17, r18
+
+    # r17 is length of legato (24000)
+    ldw r17, 4(r16)
+    
+    bge r18, r0, handleNoteChange_legatopos
+    br handleNoteChange_legatoneg
+    
+    # r17 is length of legato transition
+    # r18 is how many samples/2 we need to shrink the wave by
+    # to get to target frequency
+    
+    handleNoteChange_legatopos:
+        movi r20, 1
+        stw r20, 12(r16)
+
+        # divide length of legato by number of samples of
+        # the transition between notes
+        div r17, r17, r18
+        stw r17, 20(r16)
+        stw r18, 24(r16)
+        br handleNoteChange_teardown
+
+    # set negative step size for decreasing legato
+    handleNoteChange_legatoneg:
+        movi r20, -1
+        stw r20, 12(r16)
+
+        # flip the sign of the transition
+        sub r18, r0, r18
+		# divide length of legato by number of samples of
+        # the transition between notes
+        div r17, r17, r18
+        stw r17, 20(r16)
+        stw r18, 24(r16)
+        br handleNoteChange_teardown
+
     handleNoteChange_teardown:
         ldw ra, 0(sp)
         ldw r16, 4(sp)
         ldw r17, 8(sp)
-		stw r2, 12(sp)
-        addi sp, sp, 16
+        ldw r18, 12(sp)
+        ldw r19, 16(sp)
+        addi sp, sp, 20
         ret
 
 # Poll sensors to check for input. Change envelope sized based on sensors.
